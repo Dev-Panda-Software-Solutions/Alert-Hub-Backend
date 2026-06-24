@@ -1,0 +1,247 @@
+const prisma = require('../config/db');
+
+// ─── Core AI engine ───────────────────────────────────────────────────────────
+
+async function generateInsights(userId, simBalance) {
+  const insights = [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7);
+  const monthEnd = new Date(today); monthEnd.setMonth(monthEnd.getMonth() + 1);
+
+  const allPending = await prisma.reminder.findMany({
+    where: { userId, completed: false },
+    select: { id: true, title: true, dueDate: true, amount: true, category: true, module: true, channels: true },
+  });
+
+  // ── 1. Weekly outflow ──────────────────────────────────────────────────────
+  const weekItems = allPending.filter((r) => r.dueDate >= today && r.dueDate < weekEnd);
+  const weekTotal = weekItems.reduce((s, r) => s + r.amount, 0);
+
+  if (weekTotal > 0) {
+    insights.push({
+      type: 'weekly_outflow',
+      severity: weekTotal > 50000 ? 'warning' : 'info',
+      title: 'Weekly Cash Outflow',
+      body: `₹${formatNum(weekTotal)} is due in the next 7 days across ${weekItems.length} reminder(s).`,
+      affectedIds: weekItems.map((r) => r.id),
+    });
+  }
+
+  // ── 2. Liquidity alert ─────────────────────────────────────────────────────
+  const monthItems = allPending.filter((r) => r.dueDate >= today && r.dueDate < monthEnd);
+  const monthTotal = monthItems.reduce((s, r) => s + r.amount, 0);
+  const bufferRatio = simBalance > 0 ? monthTotal / simBalance : Infinity;
+
+  if (bufferRatio > 0.5) {
+    insights.push({
+      type: 'liquidity_alert',
+      severity: bufferRatio > 0.9 ? 'critical' : 'warning',
+      title: 'Liquidity Alert',
+      body: `Monthly obligations (₹${formatNum(monthTotal)}) consume ${Math.round(bufferRatio * 100)}% of your balance (₹${formatNum(simBalance)}). Consider maintaining a larger buffer.`,
+      affectedIds: monthItems.map((r) => r.id),
+    });
+  }
+
+  // ── 3. Overdue reminders ───────────────────────────────────────────────────
+  const overdue = allPending.filter((r) => r.dueDate < today);
+  if (overdue.length > 0) {
+    insights.push({
+      type: 'overdue',
+      severity: 'critical',
+      title: 'Overdue Reminders',
+      body: `${overdue.length} reminder(s) are past due: ${overdue.slice(0, 3).map((r) => r.title).join(', ')}${overdue.length > 3 ? '…' : ''}.`,
+      affectedIds: overdue.map((r) => r.id),
+    });
+  }
+
+  // ── 4. Date overlap conflicts ──────────────────────────────────────────────
+  const dateCounts = {};
+  allPending.forEach((r) => {
+    const key = r.dueDate.toISOString().split('T')[0];
+    if (!dateCounts[key]) dateCounts[key] = [];
+    dateCounts[key].push(r);
+  });
+
+  const conflictDays = Object.entries(dateCounts).filter(([, items]) => {
+    const total = items.reduce((s, r) => s + r.amount, 0);
+    return items.length >= 3 || total > 30000;
+  });
+
+  if (conflictDays.length > 0) {
+    const [date, items] = conflictDays[0];
+    insights.push({
+      type: 'date_conflict',
+      severity: 'warning',
+      title: 'High-Load Payment Date',
+      body: `${date} has ${items.length} payment(s) totalling ₹${formatNum(items.reduce((s, r) => s + r.amount, 0))}. Consider staggering some dates.`,
+      affectedIds: items.map((r) => r.id),
+    });
+  }
+
+  // ── 5. Subscription audit ─────────────────────────────────────────────────
+  const subscriptionCategories = ['ott', 'mobile', 'broadband', 'sip', 'health_insurance', 'car_insurance', 'lic'];
+  const subscriptions = allPending.filter((r) => subscriptionCategories.includes(r.category));
+
+  if (subscriptions.length >= 3) {
+    const total = subscriptions.reduce((s, r) => s + r.amount, 0);
+    insights.push({
+      type: 'subscription_audit',
+      severity: 'info',
+      title: 'Subscription Audit',
+      body: `You have ${subscriptions.length} recurring subscriptions totalling ₹${formatNum(total)}/mo. Review for unused services.`,
+      affectedIds: subscriptions.map((r) => r.id),
+    });
+  }
+
+  // ── 6. No reminders nudge ─────────────────────────────────────────────────
+  if (insights.length === 0) {
+    insights.push({
+      type: 'all_clear',
+      severity: 'success',
+      title: 'All Clear!',
+      body: 'You have no overdue items and your cash flow looks healthy. Great job staying on top of your finances!',
+      affectedIds: [],
+    });
+  }
+
+  return insights;
+}
+
+// ─── Cash flow chart — rolling 7 days ─────────────────────────────────────────
+
+async function cashflowChart(userId) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const days = [];
+  for (let i = -3; i <= 3; i++) {
+    const d = new Date(today); d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+
+  const start = days[0];
+  const end   = new Date(days[days.length - 1]); end.setDate(end.getDate() + 1);
+
+  const reminders = await prisma.reminder.findMany({
+    where: { userId, dueDate: { gte: start, lt: end } },
+    select: { dueDate: true, amount: true, completed: true },
+  });
+
+  const points = days.map((d) => {
+    const dateStr = d.toISOString().split('T')[0];
+    const dayItems = reminders.filter((r) => r.dueDate.toISOString().split('T')[0] === dateStr);
+    const outflow = dayItems.reduce((s, r) => s + r.amount, 0);
+    const paid    = dayItems.filter((r) => r.completed).reduce((s, r) => s + r.amount, 0);
+    return { date: dateStr, outflow, paid };
+  });
+
+  return points;
+}
+
+// ─── NLP query processor ──────────────────────────────────────────────────────
+
+async function processQuery(userId, query, simBalance) {
+  const q = query.toLowerCase().trim();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const weekEnd  = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7);
+  const monthEnd = new Date(today); monthEnd.setMonth(monthEnd.getMonth() + 1);
+
+  const pending = await prisma.reminder.findMany({
+    where: { userId, completed: false },
+    select: { id: true, title: true, dueDate: true, amount: true, category: true, module: true },
+  });
+
+  // Intent: total this month
+  if (/this month|monthly|month total/.test(q)) {
+    const month = pending.filter((r) => r.dueDate >= today && r.dueDate < monthEnd);
+    const total = month.reduce((s, r) => s + r.amount, 0);
+    return `Your total pending amount for this month is ₹${formatNum(total)} across ${month.length} reminder(s).`;
+  }
+
+  // Intent: this week
+  if (/this week|week total|next 7 days/.test(q)) {
+    const week = pending.filter((r) => r.dueDate >= today && r.dueDate < weekEnd);
+    const total = week.reduce((s, r) => s + r.amount, 0);
+    return `This week you have ₹${formatNum(total)} due across ${week.length} payment(s).`;
+  }
+
+  // Intent: overdue
+  if (/overdue|missed|late|past due/.test(q)) {
+    const over = pending.filter((r) => r.dueDate < today);
+    if (over.length === 0) return 'Great news — you have no overdue reminders!';
+    return `You have ${over.length} overdue payment(s): ${over.map((r) => r.title).join(', ')}.`;
+  }
+
+  // Intent: largest expense
+  if (/biggest|largest|highest|top expense/.test(q)) {
+    if (pending.length === 0) return 'No pending reminders to analyse.';
+    const sorted = [...pending].sort((a, b) => b.amount - a.amount);
+    const top = sorted[0];
+    return `Your largest upcoming expense is "${top.title}" at ₹${formatNum(top.amount)}.`;
+  }
+
+  // Intent: can I afford
+  if (/can i afford|afford|enough money/.test(q)) {
+    const month = pending.filter((r) => r.dueDate >= today && r.dueDate < monthEnd);
+    const total = month.reduce((s, r) => s + r.amount, 0);
+    const balance = simBalance;
+    if (balance >= total) {
+      return `Yes! Your balance of ₹${formatNum(balance)} can cover your monthly obligations of ₹${formatNum(total)}, leaving ₹${formatNum(balance - total)}.`;
+    }
+    return `Caution — your balance of ₹${formatNum(balance)} falls short of your monthly obligations of ₹${formatNum(total)} by ₹${formatNum(total - balance)}.`;
+  }
+
+  // Intent: EMI / loans
+  if (/emi|loan|credit card/.test(q)) {
+    const loans = pending.filter((r) => ['emi', 'home_loan', 'personal_loan', 'credit_card'].includes(r.category));
+    if (loans.length === 0) return 'You have no active loan or EMI reminders.';
+    const total = loans.reduce((s, r) => s + r.amount, 0);
+    return `You have ${loans.length} loan/EMI payment(s) totalling ₹${formatNum(total)}: ${loans.map((r) => r.title).join(', ')}.`;
+  }
+
+  // Intent: subscriptions
+  if (/subscription|ott|streaming|services/.test(q)) {
+    const subs = pending.filter((r) => ['ott', 'mobile', 'broadband'].includes(r.category));
+    if (subs.length === 0) return 'No subscription reminders found.';
+    const total = subs.reduce((s, r) => s + r.amount, 0);
+    return `You have ${subs.length} subscription(s) costing ₹${formatNum(total)}/mo: ${subs.map((r) => r.title).join(', ')}.`;
+  }
+
+  // Intent: business taxes
+  if (/gst|tax|tds|professional tax/.test(q)) {
+    const taxes = pending.filter((r) => ['gst', 'tds', 'income_tax', 'professional_tax'].includes(r.category));
+    if (taxes.length === 0) return 'No tax-related reminders found.';
+    const total = taxes.reduce((s, r) => s + r.amount, 0);
+    return `Tax-related payments due: ₹${formatNum(total)} across ${taxes.length} reminder(s): ${taxes.map((r) => r.title).join(', ')}.`;
+  }
+
+  // Intent: investments/SIP
+  if (/sip|invest|mutual fund|fd|fixed deposit/.test(q)) {
+    const inv = pending.filter((r) => ['sip', 'fixed_deposit'].includes(r.category));
+    if (inv.length === 0) return 'No investment reminders found.';
+    const total = inv.reduce((s, r) => s + r.amount, 0);
+    return `Your investment commitments: ₹${formatNum(total)} across ${inv.length} reminder(s).`;
+  }
+
+  // Intent: count / how many
+  if (/how many|count|total reminders/.test(q)) {
+    return `You currently have ${pending.length} pending reminder(s).`;
+  }
+
+  // Intent: hello / help
+  if (/hello|hi|hey|help|what can you do/.test(q)) {
+    return "Hello! I can help you with: monthly totals, weekly dues, overdue payments, your largest expense, affordability checks, EMIs, subscriptions, tax payments, and investment reminders. Try asking something like 'Can I afford this month?' or 'What are my overdue items?'";
+  }
+
+  return "I'm not sure about that. Try asking: 'What's due this week?', 'Show overdue reminders', or 'Can I afford this month?'";
+}
+
+function formatNum(n) {
+  return Math.round(n).toLocaleString('en-IN');
+}
+
+module.exports = { generateInsights, cashflowChart, processQuery };

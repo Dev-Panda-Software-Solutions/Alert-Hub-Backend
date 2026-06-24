@@ -1,0 +1,80 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PERSONAL
+  FAMILY
+  BUSINESS
+}
+
+enum ReminderModule {
+  BUSINESS
+  FAMILY
+  FINANCE
+}
+
+enum Recurrence {
+  NONE
+  MONTHLY
+  YEARLY
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Models
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  country      String     @default("India")
+  plan         Plan       @default(FREE)
+  simBalance   Float      @default(75000)
+  avatarUrl    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  reminders    Reminder[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Reminder {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  module      ReminderModule
+  category    String
+  amount      Float
+  dueDate     DateTime       @db.Date
+
+  recurrence  Recurrence     @default(NONE)
+  schedule    Int[]
+  channels    String[]
+
+  completed   Boolean        @default(false)
+  completedAt DateTime?
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([dueDate])
+  @@index([userId, module])
+  @@map("reminders")
+}
