@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/db');
 const { ALL_COUNTRIES } = require('../constants/currencies');
-const { sendWelcomeEmail } = require('../services/email.service');
+const { sendWelcomeEmail, sendLoginAlertEmail } = require('../services/email.service');
 
 const signToken = (payload) =>
   jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
@@ -71,6 +71,13 @@ const login = async (req, res, next) => {
     }
 
     const token = signToken({ userId: user.id });
+
+    // Security alert email (non-blocking)
+    sendLoginAlertEmail(user, {
+      time: new Date(),
+      ip: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'Unknown',
+      device: req.headers['user-agent']?.split('(')[0]?.trim() || 'Web browser',
+    }).catch(() => {});
 
     res.json({
       token,

@@ -1,7 +1,7 @@
 const express = require('express');
 const webpush  = require('web-push');
 const auth     = require('../middleware/auth');
-const { sendMail } = require('../services/email.service');
+const { sendTestEmail } = require('../services/email.service');
 const prisma   = require('../config/db');
 
 const router = express.Router();
@@ -53,8 +53,8 @@ router.post('/test', auth, async (req, res) => {
     return res.status(400).json({ error: 'No push subscription found. Enable push in the app first.' });
   }
   const payload = JSON.stringify({
-    title: 'AlertHub Test Notification',
-    body:  'Push notifications are working correctly!',
+    title: 'AlertHub — Push Notifications Active',
+    body:  'Your real-time alerts are set up. You will be notified for due payments even when this tab is closed.',
     url:   '/dashboard',
   });
   const results = await Promise.allSettled(
@@ -69,38 +69,7 @@ router.post('/test-email', auth, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user.id }, select: { email: true, name: true } });
     if (!user) return res.status(404).json({ error: 'User not found' });
-
-    const result = await sendMail({
-      to: user.email,
-      subject: '✉️ AlertHub — Email Notification Test',
-      html: `<!DOCTYPE html>
-<html><head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;margin:40px auto;">
-    <tr><td>
-      <div style="background:linear-gradient(135deg,#1e40af,#4338ca);border-radius:16px 16px 0 0;padding:28px 32px;text-align:center;">
-        <span style="font-size:36px;">🛡️</span>
-        <h1 style="margin:8px 0 4px;color:#fff;font-size:20px;font-weight:700;">AlertHub</h1>
-        <p style="margin:0;color:#bfdbfe;font-size:13px;">Email Notification Test</p>
-      </div>
-      <div style="background:#fff;padding:28px 32px;border-radius:0 0 16px 16px;">
-        <p style="margin:0 0 12px;color:#1e293b;font-size:16px;">Hi <strong>${user.name}</strong>,</p>
-        <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.6;">
-          This is a test email from AlertHub. If you received this, your email notifications are working correctly! ✅
-        </p>
-        <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;">
-          When a reminder is due, AlertHub will send you a similar email to <strong>${user.email}</strong>.
-        </p>
-        <div style="margin-top:24px;padding:16px;background:#f0fdf4;border-radius:10px;border:1px solid #bbf7d0;">
-          <p style="margin:0;color:#15803d;font-size:13px;font-weight:600;">✓ SMTP connection is working</p>
-          <p style="margin:4px 0 0;color:#16a34a;font-size:12px;">Sent at: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</p>
-        </div>
-      </div>
-    </td></tr>
-  </table>
-</body></html>`,
-    });
-
+    const result = await sendTestEmail(user);
     if (result) {
       res.json({ ok: true, to: user.email, messageId: result.messageId });
     } else {
