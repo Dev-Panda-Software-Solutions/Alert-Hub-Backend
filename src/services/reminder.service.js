@@ -101,6 +101,7 @@ async function updateReminder(id, userId, data, plan) {
       ...(data.dueDate    && { dueDate: toDbDate(data.dueDate) }),
       ...(data.recurrence && { recurrence: data.recurrence }),
       ...(data.schedule   && { schedule: data.schedule }),
+      ...('priority' in data && { priority: data.priority || null }),
       channels,
     },
   });

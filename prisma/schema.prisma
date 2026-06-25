@@ -68,6 +68,8 @@ model Reminder {
   schedule    Int[]
   channels    String[]
 
+  priority    String?        // manual override: CRITICAL | HIGH | MEDIUM | LOW | null = auto
+
   completed   Boolean        @default(false)
   completedAt DateTime?
 
