@@ -39,7 +39,11 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // ── Static uploads ────────────────────────────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Override helmet's CORP: same-origin so cross-origin <img> tags can load avatars
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, '../uploads')));
 
 // ── API Routes ─────────────────────────────────────────────────────────────────
 app.use('/api/auth',      authRoutes);
