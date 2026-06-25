@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { body } = require('express-validator');
-const { register, login, sandbox, me } = require('../controllers/auth.controller');
+const { register, login, sandbox, me, forgotPassword, resetPassword, sendOtp, verifyOtp } = require('../controllers/auth.controller');
 const validate = require('../middleware/validate');
 const auth = require('../middleware/auth');
 
@@ -13,8 +13,7 @@ router.post('/register',
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
     body('country').notEmpty().withMessage('Country is required'),
   ],
-  validate,
-  register
+  validate, register
 );
 
 router.post('/login',
@@ -22,12 +21,35 @@ router.post('/login',
     body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
     body('password').notEmpty().withMessage('Password is required'),
   ],
-  validate,
-  login
+  validate, login
 );
 
 router.post('/sandbox', sandbox);
 
 router.get('/me', auth, me);
+
+// Password reset (public — no auth)
+router.post('/forgot-password',
+  [body('email').isEmail().withMessage('Valid email is required').normalizeEmail()],
+  validate, forgotPassword
+);
+
+router.post('/reset-password',
+  [
+    body('token').notEmpty().withMessage('Token is required'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  ],
+  validate, resetPassword
+);
+
+// OTP-based password change (authenticated)
+router.post('/send-otp',  auth, sendOtp);
+router.post('/verify-otp', auth,
+  [
+    body('otp').notEmpty().withMessage('OTP is required'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  ],
+  validate, verifyOtp
+);
 
 module.exports = router;

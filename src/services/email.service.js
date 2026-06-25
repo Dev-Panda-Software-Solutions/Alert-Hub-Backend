@@ -858,6 +858,72 @@ async function sendTestEmail(user) {
   return sendMail({ to: user.email, subject: `${APP_NAME}: Email delivery test — confirmed`, html });
 }
 
+// ── Password Reset Email ───────────────────────────────────────────────────────
+
+async function sendPasswordResetEmail(user, resetUrl) {
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;background:#f1f5f9;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;">
+<tr><td style="background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.07);">
+  <div style="background:linear-gradient(135deg,#1e1b4b,#4338ca);padding:44px 40px;text-align:center;">
+    <div style="width:64px;height:64px;background:rgba(255,255,255,.12);border-radius:50%;margin:0 auto 16px;line-height:64px;font-size:28px;">&#128274;</div>
+    <h1 style="margin:0 0 6px;color:#fff;font-size:24px;font-weight:800;">Reset Your Password</h1>
+    <p style="margin:0;color:#a5b4fc;font-size:13px;">${APP_NAME} &bull; Password Recovery</p>
+  </div>
+  <div style="padding:36px 40px;">
+    <p style="margin:0 0 16px;font-size:15px;color:#1e293b;">Hi <strong>${user.name}</strong>,</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.75;">
+      We received a request to reset the password for your ${APP_NAME} account.
+      Click the button below to choose a new password. This link expires in <strong>30 minutes</strong>.
+    </p>
+    ${cta('Reset My Password', resetUrl, '#4338ca')}
+    <div style="margin:28px 0 0;padding:16px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;">
+      <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#475569;">Or copy this link:</p>
+      <p style="margin:0;font-size:11px;color:#6366f1;word-break:break-all;">${resetUrl}</p>
+    </div>
+    <p style="margin:20px 0 0;font-size:12px;color:#94a3b8;line-height:1.7;">
+      If you did not request a password reset, please ignore this email — your account remains secure.
+    </p>
+  </div>
+  ${footer('This reset link expires in 30 minutes. If you did not request this, no action is needed.')}
+</td></tr>
+<tr><td style="padding-top:18px;text-align:center;font-size:11px;color:#94a3b8;">&copy; ${YEAR} ${APP_NAME}</td></tr>
+</table></td></tr></table>
+</body></html>`;
+  return sendMail({ to: user.email, subject: `${APP_NAME}: Reset your password`, html });
+}
+
+// ── OTP Email (in-app password change) ────────────────────────────────────────
+
+async function sendOtpEmail(user, otp) {
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f0fdf4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;background:#f0fdf4;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+<tr><td style="background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(5,150,105,.1);">
+  <div style="background:linear-gradient(135deg,#064e3b,#059669);padding:40px;text-align:center;">
+    <p style="margin:0 0 10px;font-size:36px;">&#128272;</p>
+    <h1 style="margin:0 0 6px;color:#fff;font-size:22px;font-weight:800;">Password Change OTP</h1>
+    <p style="margin:0;color:#6ee7b7;font-size:13px;">${APP_NAME} &bull; Security Verification</p>
+  </div>
+  <div style="padding:36px 40px;text-align:center;">
+    <p style="margin:0 0 8px;font-size:14px;color:#475569;">Hi <strong style="color:#1e293b;">${user.name}</strong>, use this OTP to confirm your password change:</p>
+    <div style="margin:24px auto;display:inline-block;background:#f0fdf4;border:2px dashed #10b981;border-radius:16px;padding:20px 36px;">
+      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#059669;letter-spacing:.1em;text-transform:uppercase;">Your One-Time Password</p>
+      <p style="margin:0;font-size:40px;font-weight:900;color:#064e3b;letter-spacing:12px;">${otp}</p>
+    </div>
+    <p style="margin:20px 0 0;font-size:13px;color:#64748b;line-height:1.7;">This OTP is valid for <strong>10 minutes</strong> and can only be used once.</p>
+    <p style="margin:12px 0 0;font-size:12px;color:#94a3b8;">If you did not request this, your password has not been changed.</p>
+  </div>
+  ${footer('OTP requested from Alert-Guard Profile settings.')}
+</td></tr>
+<tr><td style="padding-top:18px;text-align:center;font-size:11px;color:#94a3b8;">&copy; ${YEAR} ${APP_NAME}</td></tr>
+</table></td></tr></table>
+</body></html>`;
+  return sendMail({ to: user.email, subject: `${APP_NAME}: Your password change OTP — ${otp}`, html });
+}
+
 module.exports = {
   verifySmtp,
   sendWelcomeEmail,
@@ -865,5 +931,7 @@ module.exports = {
   sendReminderDigest,
   sendOverdueAlert,
   sendTestEmail,
+  sendPasswordResetEmail,
+  sendOtpEmail,
   sendMail,
 };
