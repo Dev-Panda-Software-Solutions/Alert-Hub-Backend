@@ -1,7 +1,7 @@
 const nodemailer = require('nodemailer');
 
 const APP_URL  = process.env.CLIENT_URL || 'https://srv1567353.hstgr.cloud';
-const APP_NAME = 'AlertHub';
+const APP_NAME = 'Alert-Guard';
 const SUPPORT  = 'support@alerthub.app';
 const YEAR     = new Date().getFullYear();
 
