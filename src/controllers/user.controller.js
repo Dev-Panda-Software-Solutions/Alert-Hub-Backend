@@ -8,7 +8,8 @@ const getProfile = (req, res) => {
   res.json({
     id: u.id, name: u.name, email: u.email,
     country: u.country, plan: u.plan, simBalance: u.simBalance,
-    avatarUrl: u.avatarUrl || null, createdAt: u.createdAt,
+    avatarUrl: u.avatarUrl || null, whatsApp: u.whatsApp || null,
+    createdAt: u.createdAt,
   });
 };
 
@@ -17,18 +18,30 @@ const updateProfile = async (req, res, next) => {
   try {
     if (req.user.sandbox) return res.status(403).json({ error: 'Not available in sandbox mode.' });
 
-    const { name, country } = req.body;
+    const { name, email, whatsApp, country } = req.body;
     if (country && !ALL_COUNTRIES.includes(country)) {
       return res.status(422).json({ error: 'Invalid country.' });
     }
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(422).json({ error: 'Invalid email address.' });
+    }
 
-    const updated = await prisma.user.update({
-      where: { id: req.user.id },
-      data: { ...(name && { name }), ...(country && { country }) },
+    const data = {};
+    if (name)    data.name    = name;
+    if (email)   data.email   = email;
+    if (country) data.country = country;
+    if (whatsApp !== undefined) data.whatsApp = whatsApp || null;
+
+    const updated = await prisma.user.update({ where: { id: req.user.id }, data });
+
+    res.json({
+      message: 'Profile updated.',
+      user: { id: updated.id, name: updated.name, email: updated.email, country: updated.country, whatsApp: updated.whatsApp },
     });
-
-    res.json({ message: 'Profile updated.', user: { id: updated.id, name: updated.name, country: updated.country } });
-  } catch (err) { next(err); }
+  } catch (err) {
+    if (err.code === 'P2002') return res.status(409).json({ error: 'That email is already in use.' });
+    next(err);
+  }
 };
 
 // PUT /api/user/plan

@@ -43,6 +43,7 @@ model User {
   plan         Plan       @default(FREE)
   simBalance   Float      @default(75000)
   avatarUrl    String?
+  whatsApp     String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
