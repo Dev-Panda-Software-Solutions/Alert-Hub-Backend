@@ -4117,6 +4117,140 @@ async function sendOtpEmail(user, otp) {
   return sendMail({ to: user.email, subject: `${APP_NAME}: Your password change OTP — ${otp}`, html });
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// SIGNUP EMAIL VERIFICATION  (6 variants)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const signupVerificationVariants = [
+
+  ({ userName, otp }) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#eff6ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:48px 16px;background:#eff6ff;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+<tr><td style="background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 4px 24px rgba(37,99,235,.1);border:1px solid #bfdbfe;">
+  <div style="background:linear-gradient(135deg,#1e3a8a,#1d4ed8,#2563eb);padding:40px;text-align:center;">
+    <p style="margin:0 0 12px;font-size:52px;line-height:1;">&#9993;&#65039;</p>
+    <h1 style="margin:0 0 6px;color:#fff;font-size:24px;font-weight:800;">Verify Your Email</h1>
+    <p style="margin:0;color:#bfdbfe;font-size:13px;">${APP_NAME} &bull; Account Verification</p>
+  </div>
+  <div style="padding:36px 40px;text-align:center;">
+    <p style="margin:0 0 8px;font-size:15px;color:#1e293b;">Hi <strong>${userName}</strong> — almost there!</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.75;">Enter the 6-digit code below to verify your email address and complete your ${APP_NAME} account setup.</p>
+    <div style="background:#eff6ff;border:2px solid #2563eb;border-radius:20px;padding:24px 20px;margin:0 auto 24px;">
+      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#1d4ed8;letter-spacing:.1em;text-transform:uppercase;">Verification Code</p>
+      <p style="margin:0;font-size:52px;font-weight:900;color:#1e3a8a;letter-spacing:14px;line-height:1;">${otp}</p>
+    </div>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">This code expires in <strong>10 minutes</strong>.</p>
+    <p style="margin:0;font-size:12px;color:#94a3b8;">Didn&rsquo;t create an account? Safely ignore this email.</p>
+  </div>
+  ${footer('Code is valid for 10 minutes and can only be used once.')}
+</td></tr>${brandFooter()}</table></td></tr></table></body></html>`,
+
+  ({ userName, otp }) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f0fdf4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:48px 16px;background:#f0fdf4;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+<tr><td style="background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 4px 24px rgba(16,185,129,.1);border:1px solid #a7f3d0;">
+  <div style="height:5px;background:linear-gradient(90deg,#10b981,#059669,#047857);"></div>
+  <div style="padding:40px 40px 28px;text-align:center;">
+    <p style="margin:0 0 12px;font-size:52px;line-height:1;">&#127881;</p>
+    <h1 style="margin:0 0 6px;font-size:24px;font-weight:800;color:#1e293b;">One step away!</h1>
+    <p style="margin:0 0 20px;font-size:13px;color:#059669;">${APP_NAME} &bull; Verify your email to continue</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.75;">Hey <strong>${userName}</strong>! Enter this code in the signup page to activate your account:</p>
+    <div style="background:#f0fdf4;border:2px dashed #10b981;border-radius:20px;padding:24px;margin:0 auto 24px;">
+      <p style="margin:0;font-size:52px;font-weight:900;color:#064e3b;letter-spacing:14px;line-height:1;">${otp}</p>
+    </div>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Valid for <strong>10 minutes</strong>. One-time use only.</p>
+    <p style="margin:0;font-size:12px;color:#94a3b8;">Didn&rsquo;t sign up? Ignore this email.</p>
+  </div>
+  ${footer()}</td></tr>${brandFooter()}</table></td></tr></table></body></html>`,
+
+  ({ userName, otp }) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:linear-gradient(135deg,#1e1b4b,#312e81,#4c1d95);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:56px 16px;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+<tr><td style="background:rgba(255,255,255,.97);border-radius:24px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.35);">
+  <div style="padding:40px 40px 28px;text-align:center;">
+    <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#6d28d9;letter-spacing:.08em;text-transform:uppercase;">${APP_NAME} &bull; Email Verification</p>
+    <h1 style="margin:0 0 8px;font-size:26px;font-weight:800;color:#1e293b;">Confirm your email</h1>
+    <p style="margin:0 0 24px;font-size:14px;color:#475569;line-height:1.75;">Hi <strong>${userName}</strong>! Enter the code below to verify your email and complete signup:</p>
+    <div style="background:#f5f3ff;border-radius:18px;padding:26px;margin:0 auto 24px;">
+      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#6d28d9;letter-spacing:.08em;text-transform:uppercase;">Your code</p>
+      <p style="margin:0;font-size:52px;font-weight:900;color:#4c1d95;letter-spacing:14px;line-height:1;">${otp}</p>
+    </div>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Expires in <strong>10 minutes</strong>.</p>
+    <p style="margin:0;font-size:12px;color:#94a3b8;">Not signing up? You can ignore this.</p>
+  </div>
+  ${footer('Verification code for Alert-Guard signup.')}
+</td></tr>
+<tr><td style="padding-top:16px;text-align:center;font-size:11px;color:rgba(255,255,255,.3);">&copy; ${YEAR} ${APP_NAME}</td></tr>
+</table></td></tr></table></body></html>`,
+
+  ({ userName, otp }) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:56px 24px;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;">
+<tr><td style="padding-bottom:20px;border-bottom:2px solid #1e293b;">
+  <p style="margin:0;font-size:14px;font-weight:700;color:#1e293b;">${APP_NAME}</p>
+</td></tr>
+<tr><td style="padding:32px 0;text-align:center;">
+  <h1 style="margin:0 0 14px;font-size:26px;font-weight:800;color:#1e293b;">Verify your email &#9989;</h1>
+  <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.8;">Hi <strong>${userName}</strong>! Use this code to complete your ${APP_NAME} signup:</p>
+  <p style="margin:0 0 24px;font-size:64px;font-weight:900;color:#1e293b;letter-spacing:14px;line-height:1;">${otp}</p>
+  <p style="margin:0 0 8px;font-size:14px;color:#475569;">Valid for <strong>10 minutes</strong>.</p>
+  <p style="margin:0;font-size:12px;color:#94a3b8;">Didn&rsquo;t sign up? Ignore this email.</p>
+</td></tr>
+<tr><td style="border-top:1px solid #e2e8f0;padding-top:16px;text-align:center;"><p style="margin:0;font-size:11px;color:#94a3b8;">&copy; ${YEAR} ${APP_NAME}</p></td></tr>
+</table></td></tr></table></body></html>`,
+
+  ({ userName, otp }) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#fff7f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:48px 16px;background:#fff7f4;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+<tr><td style="background:#fff;border-radius:24px;overflow:hidden;box-shadow:0 4px 32px rgba(249,115,22,.1);border:1px solid #fed7aa;">
+  <div style="background:linear-gradient(135deg,#c2410c,#ea580c,#fb923c);padding:36px 40px;text-align:center;">
+    <p style="margin:0 0 10px;font-size:44px;line-height:1;">&#128233;</p>
+    <h1 style="margin:0 0 4px;color:#fff;font-size:22px;font-weight:800;">Verify Your Email</h1>
+    <p style="margin:0;color:#fed7aa;font-size:12px;">${APP_NAME} Account Setup</p>
+  </div>
+  <div style="padding:32px 40px;text-align:center;">
+    <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.75;">Hey <strong>${userName}</strong>! You&rsquo;re almost done. Enter this code to activate your ${APP_NAME} account:</p>
+    <div style="background:#fff7ed;border:2px solid #fb923c;border-radius:18px;padding:22px 20px;margin:0 auto 20px;">
+      <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#c2410c;text-transform:uppercase;letter-spacing:.06em;">Email Verification Code</p>
+      <p style="margin:0;font-size:52px;font-weight:900;color:#c2410c;letter-spacing:14px;line-height:1;">${otp}</p>
+    </div>
+    <p style="margin:0 0 8px;font-size:13px;color:#64748b;">Expires in <strong>10 min</strong>.</p>
+    <p style="margin:0;font-size:12px;color:#94a3b8;">Didn&rsquo;t create an account? Ignore this.</p>
+  </div>
+  ${footer()}</td></tr>${brandFooter()}</table></td></tr></table></body></html>`,
+
+  ({ userName, otp }) => `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f0f9ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;background:#f0f9ff;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;">
+<tr><td style="background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(14,165,233,.1);">
+  <div style="height:5px;background:linear-gradient(90deg,#f43f5e,#fb923c,#facc15,#4ade80,#22d3ee,#818cf8);"></div>
+  <div style="padding:36px 40px;text-align:center;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;"><tr>
+      <td style="text-align:center;">
+        <p style="margin:0 0 8px;font-size:11px;font-weight:700;color:#0369a1;letter-spacing:.08em;text-transform:uppercase;">${APP_NAME} &bull; Email Verification</p>
+        <h1 style="margin:0 0 14px;font-size:22px;font-weight:800;color:#1e293b;">Hi ${userName}, confirm your email!</h1>
+        <p style="margin:0 0 20px;font-size:14px;color:#475569;line-height:1.75;">Enter this code on the signup page to activate your account. It expires in <strong>10 minutes</strong>.</p>
+        <table cellpadding="0" cellspacing="0" style="margin:0 auto 20px;">
+          <tr>${otp.split('').map(d=>`<td style="padding:0 4px;"><div style="width:48px;height:64px;background:#f0f9ff;border:2px solid #0369a1;border-radius:12px;text-align:center;line-height:64px;font-size:32px;font-weight:900;color:#0c4a6e;">${d}</div></td>`).join('')}</tr>
+        </table>
+        <p style="margin:0;font-size:12px;color:#94a3b8;">Didn&rsquo;t sign up? Ignore this email.</p>
+      </td>
+    </tr></table>
+  </div>
+  ${footer()}</td></tr>${brandFooter()}</table></td></tr></table></body></html>`,
+];
+
+async function sendSignupVerificationEmail(user, otp) {
+  const html = pickRandom(signupVerificationVariants)({ userName: user.name, otp });
+  return sendMail({ to: user.email, subject: `${APP_NAME}: Your verification code — ${otp}`, html });
+}
+
 module.exports = {
   verifySmtp,
   sendWelcomeEmail,
@@ -4126,5 +4260,6 @@ module.exports = {
   sendTestEmail,
   sendPasswordResetEmail,
   sendOtpEmail,
+  sendSignupVerificationEmail,
   sendMail,
 };

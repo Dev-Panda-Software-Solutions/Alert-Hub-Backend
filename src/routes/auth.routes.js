@@ -1,6 +1,6 @@
 const { Router } = require('express');
 const { body } = require('express-validator');
-const { register, login, sandbox, me, forgotPassword, resetPassword, sendOtp, verifyOtp } = require('../controllers/auth.controller');
+const { register, login, sandbox, me, forgotPassword, resetPassword, sendOtp, verifyOtp, sendSignupOtp, verifySignupOtp } = require('../controllers/auth.controller');
 const validate = require('../middleware/validate');
 const auth = require('../middleware/auth');
 
@@ -40,6 +40,24 @@ router.post('/reset-password',
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   ],
   validate, resetPassword
+);
+
+// Signup email verification (public — no auth)
+router.post('/send-signup-otp',
+  [
+    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('country').notEmpty().withMessage('Country is required'),
+  ],
+  validate, sendSignupOtp
+);
+router.post('/verify-signup-otp',
+  [
+    body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+    body('otp').notEmpty().withMessage('OTP is required'),
+  ],
+  validate, verifySignupOtp
 );
 
 // OTP-based password change (authenticated)

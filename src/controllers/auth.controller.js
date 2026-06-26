@@ -6,14 +6,16 @@ const { ALL_COUNTRIES } = require('../constants/currencies');
 const {
   sendWelcomeEmail, sendLoginAlertEmail,
   sendPasswordResetEmail, sendOtpEmail,
+  sendSignupVerificationEmail,
 } = require('../services/email.service');
 
 const signToken = (payload) =>
   jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
 // In-memory stores (cleared on restart — fine for short-lived tokens)
-const resetTokens = new Map(); // token  → { userId, expiresAt }
-const otpStore    = new Map(); // userId → { otp, expiresAt }
+const resetTokens   = new Map(); // token  → { userId, expiresAt }
+const otpStore      = new Map(); // userId → { otp, expiresAt }
+const signupPending = new Map(); // email  → { name, passwordHash, country, otp, expiresAt }
 
 // POST /api/auth/register
 const register = async (req, res, next) => {
@@ -173,4 +175,79 @@ const verifyOtp = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { register, login, sandbox, me, forgotPassword, resetPassword, sendOtp, verifyOtp };
+// POST /api/auth/send-signup-otp  — validate details, send OTP to email, hold registration
+const sendSignupOtp = async (req, res, next) => {
+  try {
+    const { name, email, password, country } = req.body;
+
+    if (!name?.trim()) return res.status(422).json({ error: 'Name is required.' });
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(422).json({ error: 'Valid email is required.' });
+    if (!password || password.length < 6) return res.status(422).json({ error: 'Password must be at least 6 characters.' });
+    if (!ALL_COUNTRIES.includes(country)) return res.status(422).json({ error: 'Invalid country selected.' });
+
+    const normalised = email.toLowerCase();
+    const existing = await prisma.user.findUnique({ where: { email: normalised } });
+    if (existing) return res.status(409).json({ error: 'An account with this email already exists.' });
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+
+    signupPending.set(normalised, {
+      name: name.trim(),
+      passwordHash,
+      country,
+      otp,
+      expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+    });
+
+    await sendSignupVerificationEmail({ name: name.trim(), email: normalised }, otp);
+    res.json({ ok: true, message: `Verification code sent to ${normalised}` });
+  } catch (err) { next(err); }
+};
+
+// POST /api/auth/verify-signup-otp  — check OTP, create account, return token
+const verifySignupOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: 'Email and OTP are required.' });
+
+    const normalised = email.toLowerCase();
+    const entry = signupPending.get(normalised);
+    if (!entry) return res.status(400).json({ error: 'No pending registration for this email. Please start over.' });
+    if (Date.now() > entry.expiresAt) {
+      signupPending.delete(normalised);
+      return res.status(400).json({ error: 'Verification code has expired. Please start over.' });
+    }
+    if (entry.otp !== otp.trim()) return res.status(400).json({ error: 'Incorrect verification code. Please try again.' });
+
+    // Check again in case someone else registered this email while OTP was in flight
+    const existing = await prisma.user.findUnique({ where: { email: normalised } });
+    if (existing) { signupPending.delete(normalised); return res.status(409).json({ error: 'An account with this email already exists.' }); }
+
+    const user = await prisma.user.create({
+      data: { name: entry.name, email: normalised, passwordHash: entry.passwordHash, country: entry.country },
+    });
+    signupPending.delete(normalised);
+
+    const token = signToken({ userId: user.id });
+    sendWelcomeEmail(user).catch(() => {});
+
+    const seedDate = (offset) => {
+      const d = new Date(); d.setDate(d.getDate() + offset); d.setHours(0, 0, 0, 0); return d;
+    };
+    prisma.reminder.createMany({
+      data: [
+        { userId: user.id, title: 'Credit Card Bill', module: 'FINANCE', category: 'credit_card', amount: 5000, dueDate: seedDate(7),  recurrence: 'MONTHLY', schedule: [3, 7], channels: ['push'] },
+        { userId: user.id, title: 'Electricity Bill',  module: 'FAMILY',  category: 'electricity',  amount: 2500, dueDate: seedDate(12), recurrence: 'MONTHLY', schedule: [3],    channels: ['push'] },
+        { userId: user.id, title: 'SIP Investment',    module: 'FINANCE', category: 'sip',          amount: 5000, dueDate: seedDate(1),  recurrence: 'MONTHLY', schedule: [7],    channels: ['push'] },
+      ],
+    }).catch(() => {});
+
+    res.status(201).json({
+      token,
+      user: { id: user.id, name: user.name, email: user.email, country: user.country, plan: user.plan, simBalance: user.simBalance, avatarUrl: user.avatarUrl },
+    });
+  } catch (err) { next(err); }
+};
+
+module.exports = { register, login, sandbox, me, forgotPassword, resetPassword, sendOtp, verifyOtp, sendSignupOtp, verifySignupOtp };
