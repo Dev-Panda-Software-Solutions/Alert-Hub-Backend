@@ -1,9 +1,15 @@
 const cron = require('node-cron');
 const prisma = require('../config/db');
 const { sendReminderDigest, sendOverdueAlert } = require('./email.service');
+const { getDigestPush, getOverduePush } = require('./push.service');
 
 // Only users with plan ≥ PERSONAL get email digests
 const EMAIL_ELIGIBLE_PLANS = ['PERSONAL', 'FAMILY', 'BUSINESS'];
+
+// Lazy-load sendPushToUser so cron doesn't create a circular dep at boot time
+function getPushSender() {
+  return require('../routes/push.routes').sendPushToUser;
+}
 
 // ── Helper: get reminders in a date range for a user ─────────────────────────
 
@@ -38,11 +44,17 @@ async function runDailyDigest() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
 
+    const sendPush = getPushSender();
     let sent = 0;
     for (const user of users) {
       const reminders = await getRemindersForUser(user.id, today, tomorrow);
       if (reminders.length > 0) {
-        await sendReminderDigest(user, formatReminders(reminders), 'Daily');
+        const fmt = formatReminders(reminders);
+        const total = reminders.reduce((s, r) => s + r.amount, 0);
+        await Promise.allSettled([
+          sendReminderDigest(user, fmt, 'Daily'),
+          sendPush(user.id, ...Object.values(getDigestPush(reminders.length, total, 'Daily'))),
+        ]);
         sent++;
       }
     }
@@ -61,11 +73,17 @@ async function runWeeklyDigest() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const weekEnd = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7);
 
+    const sendPush = getPushSender();
     let sent = 0;
     for (const user of users) {
       const reminders = await getRemindersForUser(user.id, today, weekEnd);
       if (reminders.length > 0) {
-        await sendReminderDigest(user, formatReminders(reminders), 'Weekly');
+        const fmt = formatReminders(reminders);
+        const total = reminders.reduce((s, r) => s + r.amount, 0);
+        await Promise.allSettled([
+          sendReminderDigest(user, fmt, 'Weekly'),
+          sendPush(user.id, ...Object.values(getDigestPush(reminders.length, total, 'Weekly'))),
+        ]);
         sent++;
       }
     }
@@ -84,11 +102,17 @@ async function runMonthlyDigest() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const monthEnd = new Date(today); monthEnd.setMonth(monthEnd.getMonth() + 1);
 
+    const sendPush = getPushSender();
     let sent = 0;
     for (const user of users) {
       const reminders = await getRemindersForUser(user.id, today, monthEnd);
       if (reminders.length > 0) {
-        await sendReminderDigest(user, formatReminders(reminders), 'Monthly');
+        const fmt = formatReminders(reminders);
+        const total = reminders.reduce((s, r) => s + r.amount, 0);
+        await Promise.allSettled([
+          sendReminderDigest(user, fmt, 'Monthly'),
+          sendPush(user.id, ...Object.values(getDigestPush(reminders.length, total, 'Monthly'))),
+        ]);
         sent++;
       }
     }
@@ -106,6 +130,7 @@ async function runOverdueAlerts() {
     const users = await getUsersWithEmailPlan();
     const today = new Date(); today.setHours(0, 0, 0, 0);
 
+    const sendPush = getPushSender();
     let sent = 0;
     for (const user of users) {
       const overdue = await prisma.reminder.findMany({
@@ -113,7 +138,12 @@ async function runOverdueAlerts() {
         orderBy: { dueDate: 'desc' },
       });
       if (overdue.length > 0) {
-        await sendOverdueAlert(user, formatReminders(overdue));
+        const fmt = formatReminders(overdue);
+        const total = overdue.reduce((s, r) => s + r.amount, 0);
+        await Promise.allSettled([
+          sendOverdueAlert(user, fmt),
+          sendPush(user.id, ...Object.values(getOverduePush(overdue.length, total))),
+        ]);
         sent++;
       }
     }
@@ -132,11 +162,17 @@ async function runAdvanceReminders() {
     const in3 = new Date(); in3.setHours(0, 0, 0, 0); in3.setDate(in3.getDate() + 3);
     const in4 = new Date(in3); in4.setDate(in4.getDate() + 1);
 
+    const sendPush = getPushSender();
     let sent = 0;
     for (const user of users) {
       const reminders = await getRemindersForUser(user.id, in3, in4);
       if (reminders.length > 0) {
-        await sendReminderDigest(user, formatReminders(reminders), '3-Day Advance');
+        const fmt = formatReminders(reminders);
+        const total = reminders.reduce((s, r) => s + r.amount, 0);
+        await Promise.allSettled([
+          sendReminderDigest(user, fmt, '3-Day Advance'),
+          sendPush(user.id, ...Object.values(getDigestPush(reminders.length, total, '3-Day Advance'))),
+        ]);
         sent++;
       }
     }

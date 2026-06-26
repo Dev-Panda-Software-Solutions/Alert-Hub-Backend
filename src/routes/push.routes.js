@@ -2,6 +2,7 @@ const express = require('express');
 const webpush  = require('web-push');
 const auth     = require('../middleware/auth');
 const { sendTestEmail } = require('../services/email.service');
+const { getTestPush } = require('../services/push.service');
 const prisma   = require('../config/db');
 
 const router = express.Router();
@@ -52,11 +53,8 @@ router.post('/test', auth, async (req, res) => {
   if (!userSubs || userSubs.size === 0) {
     return res.status(400).json({ error: 'No push subscription found. Enable push in the app first.' });
   }
-  const payload = JSON.stringify({
-    title: 'AlertHub — Push Notifications Active',
-    body:  'Your real-time alerts are set up. You will be notified for due payments even when this tab is closed.',
-    url:   '/dashboard',
-  });
+  const { title, body, url } = getTestPush();
+  const payload = JSON.stringify({ title, body, url });
   const results = await Promise.allSettled(
     [...userSubs].map((s) => webpush.sendNotification(JSON.parse(s), payload)),
   );
