@@ -92,4 +92,13 @@ const getCountries = (_req, res) => {
   res.json({ countries: ALL_COUNTRIES });
 };
 
-module.exports = { getProfile, updateProfile, updatePlan, updateSimBalance, uploadAvatar, getCountries };
+// PATCH /api/user/trial-seen  — mark the trial welcome popup as seen
+const markTrialSeen = async (req, res, next) => {
+  try {
+    if (req.user.sandbox) return res.json({ ok: true });
+    await prisma.user.update({ where: { id: req.user.id }, data: { trialSeen: true } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getProfile, updateProfile, updatePlan, updateSimBalance, uploadAvatar, getCountries, markTrialSeen };

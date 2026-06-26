@@ -2,7 +2,7 @@ const { Router } = require('express');
 const multer = require('multer');
 const path = require('path');
 const { body } = require('express-validator');
-const { getProfile, updateProfile, updatePlan, updateSimBalance, uploadAvatar, getCountries } = require('../controllers/user.controller');
+const { getProfile, updateProfile, updatePlan, updateSimBalance, uploadAvatar, getCountries, markTrialSeen } = require('../controllers/user.controller');
 const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
@@ -53,5 +53,6 @@ router.put('/sim-balance',
 );
 
 router.post('/avatar', upload.single('avatar'), uploadAvatar);
+router.patch('/trial-seen', markTrialSeen);
 
 module.exports = router;

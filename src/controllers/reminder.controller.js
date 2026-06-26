@@ -1,4 +1,5 @@
 const svc = require('../services/reminder.service');
+const { effectivePlan } = require('../middleware/planGuard');
 
 const list = async (req, res, next) => {
   try {
@@ -17,14 +18,14 @@ const get = async (req, res, next) => {
 
 const create = async (req, res, next) => {
   try {
-    const r = await svc.createReminder(req.user.id, req.body, req.user.plan);
+    const r = await svc.createReminder(req.user.id, req.body, effectivePlan(req.user));
     res.status(201).json(r);
   } catch (err) { next(err); }
 };
 
 const update = async (req, res, next) => {
   try {
-    const r = await svc.updateReminder(req.params.id, req.user.id, req.body, req.user.plan);
+    const r = await svc.updateReminder(req.params.id, req.user.id, req.body, effectivePlan(req.user));
     res.json(r);
   } catch (err) { next(err); }
 };

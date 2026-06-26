@@ -3,7 +3,7 @@ const prisma = require('../config/db');
 const { sendReminderDigest, sendOverdueAlert } = require('./email.service');
 const { getDigestPush, getOverduePush } = require('./push.service');
 
-// Only users with plan ≥ PERSONAL get email digests
+// Users with plan ≥ PERSONAL, OR with an active trial, get email digests
 const EMAIL_ELIGIBLE_PLANS = ['PERSONAL', 'FAMILY', 'BUSINESS'];
 
 // Lazy-load sendPushToUser so cron doesn't create a circular dep at boot time
@@ -14,9 +14,15 @@ function getPushSender() {
 // ── Helper: get reminders in a date range for a user ─────────────────────────
 
 async function getUsersWithEmailPlan() {
+  const now = new Date();
   return prisma.user.findMany({
-    where: { plan: { in: EMAIL_ELIGIBLE_PLANS } },
-    select: { id: true, name: true, email: true, plan: true, simBalance: true },
+    where: {
+      OR: [
+        { plan: { in: EMAIL_ELIGIBLE_PLANS } },
+        { trialEndsAt: { gt: now } },
+      ],
+    },
+    select: { id: true, name: true, email: true, plan: true, trialEndsAt: true, simBalance: true },
   });
 }
 

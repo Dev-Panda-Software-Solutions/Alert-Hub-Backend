@@ -1,5 +1,5 @@
 const prisma = require('../config/db');
-const { sanitiseChannels, PLAN_RANK } = require('../middleware/planGuard');
+const { sanitiseChannels, PLAN_RANK, effectivePlan } = require('../middleware/planGuard');
 
 function isSandbox(req) { return req.user.sandbox; }
 
@@ -93,7 +93,7 @@ const overdue = async (req, res, next) => {
 
 // GET /api/dashboard/channels
 const channels = (req, res) => {
-  const plan = req.user.plan || 'FREE';
+  const plan = effectivePlan(req.user);
   const rank = PLAN_RANK[plan];
   res.json({
     push:      { enabled: true, locked: false },

@@ -44,6 +44,8 @@ model User {
   simBalance   Float      @default(75000)
   avatarUrl    String?
   whatsApp     String?
+  trialEndsAt  DateTime?
+  trialSeen    Boolean    @default(false)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
