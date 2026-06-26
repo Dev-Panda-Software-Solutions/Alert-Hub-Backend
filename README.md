@@ -3,7 +3,7 @@
 Node.js + Express + Prisma + PostgreSQL 16 REST API for AlertHub, a smart payment & reminder management SaaS.
 
 ## Tech Stack
-
+ 
 - **Node.js 20** + **Express** — REST API server
 - **Prisma ORM** — database access + migrations
 - **PostgreSQL 16** — primary database
