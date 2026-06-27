@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const prisma = require('../config/db');
 const { sendReminderDigest, sendOverdueAlert } = require('./email.service');
 const { getDigestPush, getOverduePush } = require('./push.service');
+const { effectivePlan, PLAN_RANK } = require('../middleware/planGuard');
 
 // Users with plan ≥ PERSONAL, OR with an active trial, get email digests
 const EMAIL_ELIGIBLE_PLANS = ['PERSONAL', 'FAMILY', 'BUSINESS'];
@@ -188,6 +189,56 @@ async function runAdvanceReminders() {
   }
 }
 
+// ── Job: Per-minute — fire custom sendTime reminders ─────────────────────────
+
+async function runCustomSendTimeAlerts() {
+  const now = new Date();
+  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  try {
+    const reminders = await prisma.reminder.findMany({
+      where: {
+        sendTime:  currentTime,
+        completed: false,
+        channels:  { has: 'email' },
+        user: {
+          OR: [
+            { plan: { in: EMAIL_ELIGIBLE_PLANS } },
+            { trialEndsAt: { gt: now } },
+          ],
+        },
+      },
+      include: { user: true },
+    });
+
+    if (reminders.length === 0) return;
+
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+
+    for (const reminder of reminders) {
+      // Only send if plan is eligible (effectivePlan respects trial)
+      if (PLAN_RANK[effectivePlan(reminder.user)] < PLAN_RANK.PERSONAL) continue;
+
+      const dueDate = new Date(reminder.dueDate); dueDate.setHours(0, 0, 0, 0);
+      const daysUntilDue = Math.round((dueDate - today) / (1000 * 60 * 60 * 24));
+
+      // Send if today is in the reminder's advance schedule, or it's due today, or overdue
+      const inSchedule = reminder.schedule.includes(daysUntilDue);
+      const dueOrOverdue = daysUntilDue <= 0;
+      if (!inSchedule && !dueOrOverdue) continue;
+
+      const fmt = [{ ...reminder, dueDate: reminder.dueDate.toISOString().split('T')[0] }];
+      const label = daysUntilDue < 0 ? 'Overdue' : daysUntilDue === 0 ? 'Due Today' : `${daysUntilDue}-Day Advance`;
+
+      sendReminderDigest(reminder.user, fmt, label).catch(() => {});
+    }
+
+    console.log(`[Cron] Custom sendTime ${currentTime} — fired for ${reminders.length} reminder(s)`);
+  } catch (err) {
+    console.error('[Cron] Custom sendTime error:', err.message);
+  }
+}
+
 // ── Register all cron jobs ────────────────────────────────────────────────────
 
 function startCronJobs() {
@@ -211,7 +262,11 @@ function startCronJobs() {
 
   // 3-day advance reminders — 7:30 AM every day
   cron.schedule('30 7 * * *', runAdvanceReminders, { timezone: 'Asia/Kolkata' });
-  console.log('[Cron] ✓ Advance reminders → 07:30 IST daily\n');
+  console.log('[Cron] ✓ Advance reminders → 07:30 IST daily');
+
+  // Per-reminder custom sendTime — runs every minute
+  cron.schedule('* * * * *', runCustomSendTimeAlerts, { timezone: 'Asia/Kolkata' });
+  console.log('[Cron] ✓ Custom sendTime alerts → every minute\n');
 }
 
 module.exports = { startCronJobs, runDailyDigest, runWeeklyDigest, runMonthlyDigest, runOverdueAlerts, runAdvanceReminders };

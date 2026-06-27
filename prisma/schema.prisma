@@ -69,6 +69,7 @@ model Reminder {
   recurrence  Recurrence     @default(NONE)
   schedule    Int[]
   channels    String[]
+  sendTime    String?        // "HH:MM" 24h — custom email send time; null = use default cron
 
   priority    String?        // manual override: CRITICAL | HIGH | MEDIUM | LOW | null = auto
 

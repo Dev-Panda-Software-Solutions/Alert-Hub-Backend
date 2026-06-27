@@ -6,6 +6,13 @@ const FREE_REMINDER_CAP = 30;
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+// Validate and normalise "HH:MM" — returns null for anything invalid/empty
+function parseSendTime(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const m = raw.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  return m ? `${m[1]}:${m[2]}` : null;
+}
+
 function toDbDate(dateStr) {
   // Accept "YYYY-MM-DD" → convert to DateTime at midnight UTC
   return new Date(`${dateStr}T00:00:00.000Z`);
@@ -67,6 +74,8 @@ async function createReminder(userId, data, plan) {
 
   const channels = sanitiseChannels(data.channels || [], plan);
 
+  const sendTime = parseSendTime(data.sendTime);
+
   const r = await prisma.reminder.create({
     data: {
       userId,
@@ -78,6 +87,7 @@ async function createReminder(userId, data, plan) {
       recurrence: data.recurrence || 'NONE',
       schedule: data.schedule || [],
       channels,
+      sendTime,
     },
   });
   return formatReminder(r);
@@ -102,6 +112,7 @@ async function updateReminder(id, userId, data, plan) {
       ...(data.recurrence && { recurrence: data.recurrence }),
       ...(data.schedule   && { schedule: data.schedule }),
       ...('priority' in data && { priority: data.priority || null }),
+      ...('sendTime' in data && { sendTime: parseSendTime(data.sendTime) }),
       channels,
     },
   });
