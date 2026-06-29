@@ -18,22 +18,7 @@ const app = express();
 
 // ── Security & parsing ────────────────────────────────────────────────────────
 app.use(helmet());
-const ALLOWED_ORIGINS = [
-  // from env — comma-separated list of allowed origins
-  ...(process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',').map(o => o.trim()) : []),
-  // Vercel deployment (always allowed so deploys work without env changes)
-  'https://alert-hub-roan.vercel.app',
-];
-
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return callback(null, true);
-    if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
-  },
-  credentials: true,
-}));
+app.use(cors({ origin: true, credentials: true }));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
