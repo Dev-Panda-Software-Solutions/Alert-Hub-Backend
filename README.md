@@ -5,7 +5,7 @@ Node.js + Express + Prisma + PostgreSQL 16 REST API for AlertHub, a smart paymen
 ## Tech Stack
  
 - **Node.js 20** + **Express** — REST API server
-- **Prisma ORM** — database access + migrations
+- **Prisma ORM** — database access +  migrations
 - **PostgreSQL 16** — primary database
 - **JWT** (jsonwebtoken) — authentication
 - **bcryptjs** — password hashing
