@@ -147,26 +147,48 @@ async function processQuery(userId, query, simBalance) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+  const dayAfterTomorrow = new Date(today); dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
   const weekEnd  = new Date(today); weekEnd.setDate(weekEnd.getDate() + 7);
   const monthEnd = new Date(today); monthEnd.setMonth(monthEnd.getMonth() + 1);
+  const next30End = new Date(today); next30End.setDate(next30End.getDate() + 30);
 
   const pending = await prisma.reminder.findMany({
     where: { userId, completed: false },
     select: { id: true, title: true, dueDate: true, amount: true, category: true, module: true },
+    orderBy: [{ dueDate: 'asc' }, { amount: 'desc' }],
   });
+
+  const inRange = (start, end) => pending.filter((r) => r.dueDate >= start && r.dueDate < end);
+  const total = (items) => items.reduce((s, r) => s + r.amount, 0);
+  const listTitles = (items) => items.slice(0, 5).map((r) => `${r.title} (${formatDate(r.dueDate)}, ₹${formatNum(r.amount)})`).join(', ');
+  const summarise = (label, items) => {
+    if (items.length === 0) return `No pending reminders found for ${label}.`;
+    return `${label}: ₹${formatNum(total(items))} across ${items.length} reminder(s). ${listTitles(items)}${items.length > 5 ? '...' : ''}.`;
+  };
+  const byCategory = (categories) => pending.filter((r) => categories.includes(r.category));
+  const byModule = (module) => pending.filter((r) => r.module === module);
+
+  if (/due today|today/.test(q)) {
+    return summarise('Due today', inRange(today, tomorrow));
+  }
+
+  if (/due tomorrow|tomorrow/.test(q)) {
+    return summarise('Due tomorrow', inRange(tomorrow, dayAfterTomorrow));
+  }
 
   // Intent: total this month
   if (/this month|monthly|month total/.test(q)) {
-    const month = pending.filter((r) => r.dueDate >= today && r.dueDate < monthEnd);
-    const total = month.reduce((s, r) => s + r.amount, 0);
-    return `Your total pending amount for this month is ₹${formatNum(total)} across ${month.length} reminder(s).`;
+    return summarise('This month', inRange(today, monthEnd));
   }
 
   // Intent: this week
-  if (/this week|week total|next 7 days/.test(q)) {
-    const week = pending.filter((r) => r.dueDate >= today && r.dueDate < weekEnd);
-    const total = week.reduce((s, r) => s + r.amount, 0);
-    return `This week you have ₹${formatNum(total)} due across ${week.length} payment(s).`;
+  if (/this week|week total|next 7 days|next week|cash flow next week/.test(q)) {
+    return summarise('This week', inRange(today, weekEnd));
+  }
+
+  if (/next 30 days|30 days|upcoming bills|upcoming payments|upcoming reminders/.test(q)) {
+    return summarise('Next 30 days', inRange(today, next30End));
   }
 
   // Intent: overdue
@@ -181,50 +203,94 @@ async function processQuery(userId, query, simBalance) {
     if (pending.length === 0) return 'No pending reminders to analyse.';
     const sorted = [...pending].sort((a, b) => b.amount - a.amount);
     const top = sorted[0];
-    return `Your largest upcoming expense is "${top.title}" at ₹${formatNum(top.amount)}.`;
+    return `Your largest upcoming expense is "${top.title}" at ₹${formatNum(top.amount)}, due on ${formatDate(top.dueDate)}.`;
   }
 
   // Intent: can I afford
   if (/can i afford|afford|enough money/.test(q)) {
-    const month = pending.filter((r) => r.dueDate >= today && r.dueDate < monthEnd);
-    const total = month.reduce((s, r) => s + r.amount, 0);
+    const month = inRange(today, monthEnd);
+    const monthTotal = total(month);
     const balance = simBalance;
-    if (balance >= total) {
-      return `Yes! Your balance of ₹${formatNum(balance)} can cover your monthly obligations of ₹${formatNum(total)}, leaving ₹${formatNum(balance - total)}.`;
+    if (balance >= monthTotal) {
+      return `Yes. Your balance of ₹${formatNum(balance)} can cover this month's pending obligations of ₹${formatNum(monthTotal)}, leaving ₹${formatNum(balance - monthTotal)}.`;
     }
-    return `Caution — your balance of ₹${formatNum(balance)} falls short of your monthly obligations of ₹${formatNum(total)} by ₹${formatNum(total - balance)}.`;
+    return `Caution: your balance of ₹${formatNum(balance)} falls short of this month's pending obligations of ₹${formatNum(monthTotal)} by ₹${formatNum(monthTotal - balance)}.`;
+  }
+
+  if (/cash.*remain|remaining cash|cash remaining|left after/.test(q)) {
+    const monthTotal = total(inRange(today, monthEnd));
+    return `After this month's pending reminders, your simulated cash balance would be ₹${formatNum(simBalance - monthTotal)} (₹${formatNum(simBalance)} balance - ₹${formatNum(monthTotal)} due).`;
   }
 
   // Intent: EMI / loans
   if (/emi|loan|credit card/.test(q)) {
-    const loans = pending.filter((r) => ['emi', 'home_loan', 'personal_loan', 'credit_card'].includes(r.category));
-    if (loans.length === 0) return 'You have no active loan or EMI reminders.';
-    const total = loans.reduce((s, r) => s + r.amount, 0);
-    return `You have ${loans.length} loan/EMI payment(s) totalling ₹${formatNum(total)}: ${loans.map((r) => r.title).join(', ')}.`;
+    if (/credit card/.test(q)) {
+      return summarise('Credit card payments', byCategory(['credit_card']));
+    }
+    return summarise('Loan and EMI payments', byCategory(['emi', 'home_loan', 'personal_loan', 'credit_card']));
   }
 
   // Intent: subscriptions
   if (/subscription|ott|streaming|services/.test(q)) {
-    const subs = pending.filter((r) => ['ott', 'mobile', 'broadband'].includes(r.category));
-    if (subs.length === 0) return 'No subscription reminders found.';
-    const total = subs.reduce((s, r) => s + r.amount, 0);
-    return `You have ${subs.length} subscription(s) costing ₹${formatNum(total)}/mo: ${subs.map((r) => r.title).join(', ')}.`;
+    return summarise('Subscriptions and services', byCategory(['ott', 'mobile', 'broadband']));
   }
 
   // Intent: business taxes
   if (/gst|tax|tds|professional tax/.test(q)) {
-    const taxes = pending.filter((r) => ['gst', 'tds', 'income_tax', 'professional_tax'].includes(r.category));
-    if (taxes.length === 0) return 'No tax-related reminders found.';
-    const total = taxes.reduce((s, r) => s + r.amount, 0);
-    return `Tax-related payments due: ₹${formatNum(total)} across ${taxes.length} reminder(s): ${taxes.map((r) => r.title).join(', ')}.`;
+    return summarise('Tax and GST payments', byCategory(['gst', 'tds', 'income_tax', 'professional_tax']));
   }
 
   // Intent: investments/SIP
   if (/sip|invest|mutual fund|fd|fixed deposit/.test(q)) {
-    const inv = pending.filter((r) => ['sip', 'fixed_deposit'].includes(r.category));
-    if (inv.length === 0) return 'No investment reminders found.';
-    const total = inv.reduce((s, r) => s + r.amount, 0);
-    return `Your investment commitments: ₹${formatNum(total)} across ${inv.length} reminder(s).`;
+    return summarise('Investment reminders', byCategory(['sip', 'fixed_deposit']));
+  }
+
+  if (/insurance/.test(q)) {
+    return summarise('Insurance payments', byCategory(['lic', 'health_insurance', 'car_insurance']));
+  }
+
+  if (/family|household|home bills/.test(q)) {
+    return summarise('Family bills', byModule('FAMILY'));
+  }
+
+  if (/business/.test(q)) {
+    return summarise('Business payments', byModule('BUSINESS'));
+  }
+
+  if (/finance|financial payments/.test(q)) {
+    return summarise('Finance payments', byModule('FINANCE'));
+  }
+
+  if (/module.*cost|costs the most|which module/.test(q)) {
+    if (pending.length === 0) return 'No pending reminders to compare by module.';
+    const modules = ['BUSINESS', 'FAMILY', 'FINANCE'].map((module) => ({
+      module,
+      amount: total(byModule(module)),
+      count: byModule(module).length,
+    })).sort((a, b) => b.amount - a.amount);
+    const top = modules[0];
+    return `${top.module} costs the most right now: ₹${formatNum(top.amount)} across ${top.count} pending reminder(s). Breakdown: ${modules.map((m) => `${m.module} ₹${formatNum(m.amount)}`).join(', ')}.`;
+  }
+
+  if (/pay first|priority|urgent|first/.test(q)) {
+    const ordered = [...pending].sort((a, b) => {
+      const dateDiff = a.dueDate - b.dueDate;
+      return dateDiff || b.amount - a.amount;
+    });
+    if (ordered.length === 0) return 'No pending reminders need payment priority right now.';
+    return `Pay these first based on due date and amount: ${listTitles(ordered)}${ordered.length > 5 ? '...' : ''}.`;
+  }
+
+  if (/saving tips|save money|reduce spending|spending tips/.test(q)) {
+    const subs = byCategory(['ott', 'mobile', 'broadband']);
+    const overdue = pending.filter((r) => r.dueDate < today);
+    const monthTotal = total(inRange(today, monthEnd));
+    return [
+      `This month has ₹${formatNum(monthTotal)} pending.`,
+      overdue.length ? `Clear ${overdue.length} overdue reminder(s) first to avoid penalties.` : 'You have no overdue reminders, so keep paying before due dates.',
+      subs.length ? `Review ${subs.length} subscription/service reminder(s) worth ₹${formatNum(total(subs))}.` : 'No subscription reminders are currently visible.',
+      'Prioritise high-value and nearest-due payments before discretionary spending.',
+    ].join(' ');
   }
 
   // Intent: count / how many
@@ -242,6 +308,10 @@ async function processQuery(userId, query, simBalance) {
 
 function formatNum(n) {
   return Math.round(n).toLocaleString('en-IN');
+}
+
+function formatDate(d) {
+  return d.toISOString().split('T')[0];
 }
 
 module.exports = { generateInsights, cashflowChart, processQuery };
