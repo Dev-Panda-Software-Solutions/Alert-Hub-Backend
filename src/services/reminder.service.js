@@ -1,6 +1,7 @@
 const prisma = require('../config/db');
 const { sanitiseChannels, PLAN_RANK } = require('../middleware/planGuard');
 const { ALL_CATEGORY_VALUES } = require('../constants/categories');
+const { ALL_CUSTOM_TEMPLATE_KEYS } = require('../constants/customTemplates');
 
 const FREE_REMINDER_CAP = 30;
 
@@ -16,6 +17,15 @@ function parseSendTime(raw) {
 function toDbDate(dateStr) {
   // Accept "YYYY-MM-DD" → convert to DateTime at midnight UTC
   return new Date(`${dateStr}T00:00:00.000Z`);
+}
+
+// Normalise + validate a submitted customTemplateKey — '' / null / undefined all mean "no custom template"
+function parseCustomTemplateKey(raw) {
+  if (raw === undefined || raw === null || raw === '') return null;
+  if (!ALL_CUSTOM_TEMPLATE_KEYS.includes(raw)) {
+    const e = new Error('Invalid customTemplateKey.'); e.status = 422; throw e;
+  }
+  return raw;
 }
 
 function formatReminder(r) {
@@ -75,6 +85,7 @@ async function createReminder(userId, data, plan) {
   const channels = sanitiseChannels(data.channels || [], plan);
 
   const sendTime = parseSendTime(data.sendTime);
+  const customTemplateKey = parseCustomTemplateKey(data.customTemplateKey);
 
   const r = await prisma.reminder.create({
     data: {
@@ -88,6 +99,7 @@ async function createReminder(userId, data, plan) {
       schedule: data.schedule || [],
       channels,
       sendTime,
+      customTemplateKey,
     },
   });
   return formatReminder(r);
@@ -113,6 +125,7 @@ async function updateReminder(id, userId, data, plan) {
       ...(data.schedule   && { schedule: data.schedule }),
       ...('priority' in data && { priority: data.priority || null }),
       ...('sendTime' in data && { sendTime: parseSendTime(data.sendTime) }),
+      ...('customTemplateKey' in data && { customTemplateKey: parseCustomTemplateKey(data.customTemplateKey) }),
       channels,
     },
   });
@@ -163,6 +176,7 @@ async function toggleComplete(id, userId) {
           recurrence: existing.recurrence,
           schedule: existing.schedule,
           channels: existing.channels,
+          customTemplateKey: existing.customTemplateKey,
         },
       });
     }

@@ -1,5 +1,10 @@
 const svc = require('../services/reminder.service');
 const { effectivePlan } = require('../middleware/planGuard');
+const { CUSTOM_TEMPLATE_CATALOG } = require('../constants/customTemplates');
+
+const customTemplates = (_req, res) => {
+  res.json({ domains: CUSTOM_TEMPLATE_CATALOG });
+};
 
 const list = async (req, res, next) => {
   try {
@@ -55,4 +60,4 @@ const bulkDelete = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { list, get, create, update, remove, toggle, bulkDelete };
+module.exports = { list, get, create, update, remove, toggle, bulkDelete, customTemplates };

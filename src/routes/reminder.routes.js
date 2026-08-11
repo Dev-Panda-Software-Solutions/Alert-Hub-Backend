@@ -16,6 +16,7 @@ const reminderBody = [
   body('recurrence').optional().isIn(['NONE', 'MONTHLY', 'YEARLY']).withMessage('Invalid recurrence'),
   body('schedule').optional().isArray().withMessage('schedule must be an array of integers'),
   body('channels').optional().isArray().withMessage('channels must be an array'),
+  body('customTemplateKey').optional({ nullable: true }).isString().withMessage('customTemplateKey must be a string'),
 ];
 
 router.get('/', [
@@ -23,6 +24,8 @@ router.get('/', [
   query('page').optional().isInt({ min: 1 }),
   query('limit').optional().isInt({ min: 1, max: 200 }),
 ], validate, ctrl.list);
+
+router.get('/custom-templates', ctrl.customTemplates);
 
 router.get('/:id', ctrl.get);
 
@@ -34,6 +37,7 @@ router.put('/:id', [
   body('dueDate').optional().isISO8601(),
   body('recurrence').optional().isIn(['NONE', 'MONTHLY', 'YEARLY']),
   body('channels').optional().isArray(),
+  body('customTemplateKey').optional({ nullable: true }).isString(),
 ], validate, ctrl.update);
 
 router.delete('/bulk', ctrl.bulkDelete);

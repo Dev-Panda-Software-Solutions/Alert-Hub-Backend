@@ -73,6 +73,8 @@ model Reminder {
 
   priority    String?        // manual override: CRITICAL | HIGH | MEDIUM | LOW | null = auto
 
+  customTemplateKey String?  // "domain.type" key into src/data/customTemplates.json; null = use default digest email
+
   completed   Boolean        @default(false)
   completedAt DateTime?
 

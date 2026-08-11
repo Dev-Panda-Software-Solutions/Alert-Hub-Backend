@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const prisma = require('../config/db');
-const { sendReminderDigest, sendOverdueAlert } = require('./email.service');
+const { sendReminderDigest, sendOverdueAlert, sendCustomEmail } = require('./email.service');
 const { getDigestPush, getOverduePush } = require('./push.service');
 const { effectivePlan, PLAN_RANK } = require('../middleware/planGuard');
 
@@ -42,6 +42,35 @@ function formatReminders(items) {
   return items.map((r) => ({ ...r, dueDate: r.dueDate.toISOString().split('T')[0] }));
 }
 
+// Splits a user's due reminders into "has a custom template" (sent individually,
+// using its own JSON-driven subject/body) vs. the rest (bundled into the usual digest).
+function dispatchReminderEmails(user, reminders, label) {
+  const custom = reminders.filter((r) => r.customTemplateKey);
+  const standard = reminders.filter((r) => !r.customTemplateKey);
+
+  const tasks = custom.map((r) => sendCustomEmail(user, r.customTemplateKey, {
+    title: r.title, amount: r.amount, dueDate: r.dueDate, category: r.category,
+  }));
+
+  if (standard.length > 0) tasks.push(sendReminderDigest(user, standard, label));
+
+  return Promise.allSettled(tasks);
+}
+
+// Same split, but for the overdue-alert flow (which has its own template instead of a digest one).
+function dispatchOverdueEmails(user, reminders) {
+  const custom = reminders.filter((r) => r.customTemplateKey);
+  const standard = reminders.filter((r) => !r.customTemplateKey);
+
+  const tasks = custom.map((r) => sendCustomEmail(user, r.customTemplateKey, {
+    title: r.title, amount: r.amount, dueDate: r.dueDate, category: r.category,
+  }));
+
+  if (standard.length > 0) tasks.push(sendOverdueAlert(user, standard));
+
+  return Promise.allSettled(tasks);
+}
+
 // ── Job: Daily digest at 8:00 AM — reminders due today ───────────────────────
 
 async function runDailyDigest() {
@@ -59,7 +88,7 @@ async function runDailyDigest() {
         const fmt = formatReminders(reminders);
         const total = reminders.reduce((s, r) => s + r.amount, 0);
         await Promise.allSettled([
-          sendReminderDigest(user, fmt, 'Daily'),
+          dispatchReminderEmails(user, fmt, 'Daily'),
           sendPush(user.id, ...Object.values(getDigestPush(reminders.length, total, 'Daily'))),
         ]);
         sent++;
@@ -88,7 +117,7 @@ async function runWeeklyDigest() {
         const fmt = formatReminders(reminders);
         const total = reminders.reduce((s, r) => s + r.amount, 0);
         await Promise.allSettled([
-          sendReminderDigest(user, fmt, 'Weekly'),
+          dispatchReminderEmails(user, fmt, 'Weekly'),
           sendPush(user.id, ...Object.values(getDigestPush(reminders.length, total, 'Weekly'))),
         ]);
         sent++;
@@ -117,7 +146,7 @@ async function runMonthlyDigest() {
         const fmt = formatReminders(reminders);
         const total = reminders.reduce((s, r) => s + r.amount, 0);
         await Promise.allSettled([
-          sendReminderDigest(user, fmt, 'Monthly'),
+          dispatchReminderEmails(user, fmt, 'Monthly'),
           sendPush(user.id, ...Object.values(getDigestPush(reminders.length, total, 'Monthly'))),
         ]);
         sent++;
@@ -148,7 +177,7 @@ async function runOverdueAlerts() {
         const fmt = formatReminders(overdue);
         const total = overdue.reduce((s, r) => s + r.amount, 0);
         await Promise.allSettled([
-          sendOverdueAlert(user, fmt),
+          dispatchOverdueEmails(user, fmt),
           sendPush(user.id, ...Object.values(getOverduePush(overdue.length, total))),
         ]);
         sent++;
@@ -177,7 +206,7 @@ async function runAdvanceReminders() {
         const fmt = formatReminders(reminders);
         const total = reminders.reduce((s, r) => s + r.amount, 0);
         await Promise.allSettled([
-          sendReminderDigest(user, fmt, '3-Day Advance'),
+          dispatchReminderEmails(user, fmt, '3-Day Advance'),
           sendPush(user.id, ...Object.values(getDigestPush(reminders.length, total, '3-Day Advance'))),
         ]);
         sent++;
@@ -227,10 +256,17 @@ async function runCustomSendTimeAlerts() {
       const dueOrOverdue = daysUntilDue <= 0;
       if (!inSchedule && !dueOrOverdue) continue;
 
-      const fmt = [{ ...reminder, dueDate: reminder.dueDate.toISOString().split('T')[0] }];
+      const dueDateStr = reminder.dueDate.toISOString().split('T')[0];
       const label = daysUntilDue < 0 ? 'Overdue' : daysUntilDue === 0 ? 'Due Today' : `${daysUntilDue}-Day Advance`;
 
-      sendReminderDigest(reminder.user, fmt, label).catch(() => {});
+      if (reminder.customTemplateKey) {
+        sendCustomEmail(reminder.user, reminder.customTemplateKey, {
+          title: reminder.title, amount: reminder.amount, dueDate: dueDateStr, category: reminder.category,
+        }).catch(() => {});
+      } else {
+        const fmt = [{ ...reminder, dueDate: dueDateStr }];
+        sendReminderDigest(reminder.user, fmt, label).catch(() => {});
+      }
     }
 
     console.log(`[Cron] Custom sendTime ${currentTime} — fired for ${reminders.length} reminder(s)`);

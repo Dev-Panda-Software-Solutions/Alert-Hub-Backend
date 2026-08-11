@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { CUSTOM_TEMPLATE_MAP } = require('../constants/customTemplates');
 
 const APP_URL  = process.env.CLIENT_URL || 'https://srv1567353.hstgr.cloud';
 const APP_NAME = 'Alert-Guard';
@@ -4251,6 +4252,55 @@ async function sendSignupVerificationEmail(user, otp) {
   return sendMail({ to: user.email, subject: `${APP_NAME}: Your verification code — ${otp}`, html });
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// CUSTOM TEMPLATES — JSON-driven (80 domain/type variants, see src/data/customTemplates.json)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Replace {{token}} placeholders in a template string with values from `data`.
+// Unmatched tokens are left blank rather than leaking "{{...}}" into a sent email.
+function fillPlaceholders(str, data) {
+  return String(str || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, token) => {
+    const value = data[token];
+    return value === undefined || value === null ? '' : String(value);
+  });
+}
+
+// Renders any custom-template entry into a single consistent HTML shell,
+// reusing the same footer()/cta() building blocks as the hand-built templates above.
+function renderCustomTemplate(templateKey, data = {}) {
+  const tpl = CUSTOM_TEMPLATE_MAP[templateKey];
+  if (!tpl) { const e = new Error(`Unknown custom template key: ${templateKey}`); e.status = 422; throw e; }
+
+  const subject = fillPlaceholders(tpl.subject, data);
+  const heading = fillPlaceholders(tpl.heading, data);
+  const body    = fillPlaceholders(tpl.body, data);
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;background:#f1f5f9;"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;">
+<tr><td style="padding-bottom:18px;text-align:center;font-size:12px;font-weight:700;color:#64748b;letter-spacing:.08em;text-transform:uppercase;">${APP_NAME} &bull; ${tpl.domainLabel}</td></tr>
+<tr><td style="background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.08);">
+  <div style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#4338ca 100%);padding:40px;text-align:center;">
+    <div style="width:64px;height:64px;background:rgba(255,255,255,.12);border-radius:16px;margin:0 auto 18px;line-height:64px;text-align:center;font-size:30px;">&#128276;</div>
+    <h1 style="margin:0;color:#fff;font-size:24px;font-weight:800;letter-spacing:-.5px;">${heading}</h1>
+  </div>
+  <div style="padding:36px 40px;">
+    <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.75;">${body}</p>
+    <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;line-height:1.7;">${tpl.explanation}</p>
+    ${cta('Open My Dashboard', `${APP_URL}/reminders`, '#4338ca')}
+  </div>
+  ${footer()}</td></tr>${brandFooter()}</table></td></tr></table></body></html>`;
+
+  return { subject, html };
+}
+
+// data: { userName, title, amount, dueDate, ... } — anything referenced by {{tokens}} in the JSON entry
+async function sendCustomEmail(user, templateKey, data = {}) {
+  const { subject, html } = renderCustomTemplate(templateKey, { userName: user.name, ...data });
+  return sendMail({ to: user.email, subject, html });
+}
+
 module.exports = {
   verifySmtp,
   sendWelcomeEmail,
@@ -4261,5 +4311,7 @@ module.exports = {
   sendPasswordResetEmail,
   sendOtpEmail,
   sendSignupVerificationEmail,
+  sendCustomEmail,
+  renderCustomTemplate,
   sendMail,
 };
