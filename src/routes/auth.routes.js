@@ -16,9 +16,11 @@ router.post('/register',
   validate, register
 );
 
+// Not .isEmail() — this field doubles as the admin username, which isn't email-shaped.
+// The controller decides which path it is; a plain non-empty check is all that belongs here.
 router.post('/login',
   [
-    body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+    body('email').trim().notEmpty().withMessage('Email is required'),
     body('password').notEmpty().withMessage('Password is required'),
   ],
   validate, login

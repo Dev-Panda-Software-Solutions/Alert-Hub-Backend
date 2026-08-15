@@ -1,20 +1,9 @@
-const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/db');
 const { PLAN_RANK } = require('../middleware/planGuard');
+const { safeEqual } = require('../utils/safeEqual');
 
 const ADMIN_TOKEN_TTL = '12h';
-
-// Constant-time string compare — avoids leaking password length/content via response timing.
-function safeEqual(a, b) {
-  const bufA = Buffer.from(String(a));
-  const bufB = Buffer.from(String(b));
-  if (bufA.length !== bufB.length) {
-    crypto.timingSafeEqual(bufA, bufA); // keep timing consistent even on length mismatch
-    return false;
-  }
-  return crypto.timingSafeEqual(bufA, bufB);
-}
 
 // POST /api/admin/login
 const login = (req, res) => {
@@ -39,8 +28,15 @@ const stats = async (_req, res, next) => {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
+    // 14 daily buckets for the signup-growth sparkline, oldest → newest
+    const dayStart = (offsetDays) => {
+      const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - offsetDays); return d;
+    };
+    const growthDays = Array.from({ length: 14 }, (_, i) => 13 - i);
+
     const [totalUsers, planCounts, totalReminders, pendingReminders, overdueReminders,
-      activeTrials, newUsers30d] = await Promise.all([
+      activeTrials, newUsers30d, countryCounts, moduleCounts, categoryCounts,
+      recurrenceCounts, amountAgg, growthCounts] = await Promise.all([
       prisma.user.count(),
       prisma.user.groupBy({ by: ['plan'], _count: { plan: true } }),
       prisma.reminder.count(),
@@ -48,15 +44,38 @@ const stats = async (_req, res, next) => {
       prisma.reminder.count({ where: { completed: false, dueDate: { lt: now } } }),
       prisma.user.count({ where: { trialEndsAt: { gt: now } } }),
       prisma.user.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.user.groupBy({ by: ['country'], _count: { country: true }, orderBy: { _count: { country: 'desc' } }, take: 6 }),
+      prisma.reminder.groupBy({ by: ['module'], _count: { module: true } }),
+      prisma.reminder.groupBy({ by: ['category'], _count: { category: true }, orderBy: { _count: { category: 'desc' } }, take: 8 }),
+      prisma.reminder.groupBy({ by: ['recurrence'], _count: { recurrence: true } }),
+      prisma.reminder.aggregate({ _sum: { amount: true } }),
+      Promise.all(growthDays.map(async (offset) => {
+        const start = dayStart(offset);
+        const end = dayStart(offset - 1);
+        const count = await prisma.user.count({ where: { createdAt: { gte: start, lt: end } } });
+        return { date: start.toISOString().split('T')[0], count };
+      })),
     ]);
 
     const byPlan = { FREE: 0, PERSONAL: 0, FAMILY: 0, BUSINESS: 0 };
     planCounts.forEach((p) => { byPlan[p.plan] = p._count.plan; });
 
+    const byModule = { BUSINESS: 0, FAMILY: 0, FINANCE: 0 };
+    moduleCounts.forEach((m) => { byModule[m.module] = m._count.module; });
+
+    const byRecurrence = { NONE: 0, MONTHLY: 0, YEARLY: 0 };
+    recurrenceCounts.forEach((r) => { byRecurrence[r.recurrence] = r._count.recurrence; });
+
     res.json({
       totalUsers, byPlan, activeTrials, newUsers30d,
       totalReminders, pendingReminders, overdueReminders,
       completedReminders: totalReminders - pendingReminders,
+      avgRemindersPerUser: totalUsers > 0 ? Math.round((totalReminders / totalUsers) * 10) / 10 : 0,
+      totalAmountTracked: amountAgg._sum.amount || 0,
+      byModule, byRecurrence,
+      topCountries: countryCounts.map((c) => ({ country: c.country, count: c._count.country })),
+      topCategories: categoryCounts.map((c) => ({ category: c.category, count: c._count.category })),
+      signupGrowth: growthCounts,
     });
   } catch (err) { next(err); }
 };
@@ -97,13 +116,36 @@ const listUsers = async (req, res, next) => {
 // GET /api/admin/users/:id
 const getUser = async (req, res, next) => {
   try {
+    const { id } = req.params;
+    const now = new Date();
+
     const user = await prisma.user.findUnique({
-      where: { id: req.params.id },
-      include: { reminders: { orderBy: { dueDate: 'desc' }, take: 20 } },
+      where: { id },
+      include: { reminders: { orderBy: { dueDate: 'desc' }, take: 50 } },
     });
     if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const [total, pending, overdue, completed, amountAgg, moduleCounts] = await Promise.all([
+      prisma.reminder.count({ where: { userId: id } }),
+      prisma.reminder.count({ where: { userId: id, completed: false } }),
+      prisma.reminder.count({ where: { userId: id, completed: false, dueDate: { lt: now } } }),
+      prisma.reminder.count({ where: { userId: id, completed: true } }),
+      prisma.reminder.aggregate({ where: { userId: id }, _sum: { amount: true } }),
+      prisma.reminder.groupBy({ by: ['module'], where: { userId: id }, _count: { module: true } }),
+    ]);
+
+    const byModule = { BUSINESS: 0, FAMILY: 0, FINANCE: 0 };
+    moduleCounts.forEach((m) => { byModule[m.module] = m._count.module; });
+
     const { passwordHash, ...safe } = user;
-    res.json(safe);
+    res.json({
+      ...safe,
+      reminderStats: {
+        total, pending, overdue, completed,
+        totalAmount: amountAgg._sum.amount || 0,
+        byModule,
+      },
+    });
   } catch (err) { next(err); }
 };
 

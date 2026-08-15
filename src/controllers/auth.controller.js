@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const prisma = require('../config/db');
 const { ALL_COUNTRIES } = require('../constants/currencies');
 const { getAppUrl } = require('../utils/appUrl');
+const { safeEqual } = require('../utils/safeEqual');
 const {
   sendWelcomeEmail, sendLoginAlertEmail,
   sendPasswordResetEmail, sendOtpEmail,
@@ -56,9 +57,20 @@ const register = async (req, res, next) => {
 };
 
 // POST /api/auth/login
+// One login form serves both regular users and the single admin account —
+// the credentials themselves decide which path this is, so the frontend
+// never needs a separate admin login page.
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+
+    const adminUser = process.env.ADMIN_USERNAME;
+    const adminPass = process.env.ADMIN_PASSWORD;
+    if (adminUser && adminPass && safeEqual(email, adminUser) && safeEqual(password, adminPass)) {
+      const token = jwt.sign({ admin: true }, process.env.JWT_SECRET, { expiresIn: '12h' });
+      return res.json({ token, admin: true });
+    }
+
     const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
 
