@@ -12,6 +12,7 @@ const calendarRoutes  = require('./routes/calendar.routes');
 const insightsRoutes  = require('./routes/insights.routes');
 const emailRoutes     = require('./routes/email.routes');
 const pushRoutes      = require('./routes/push.routes');
+const adminRoutes     = require('./routes/admin.routes');
 const errorHandler    = require('./middleware/errorHandler');
 
 const app = express();
@@ -53,6 +54,7 @@ app.use('/api/calendar',  calendarRoutes);
 app.use('/api/insights',  insightsRoutes);
 app.use('/api/email',     emailRoutes);
 app.use('/api/push',      pushRoutes);
+app.use('/api/admin',     adminRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {

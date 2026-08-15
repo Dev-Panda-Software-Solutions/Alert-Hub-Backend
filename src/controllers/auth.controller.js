@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const prisma = require('../config/db');
 const { ALL_COUNTRIES } = require('../constants/currencies');
+const { getAppUrl } = require('../utils/appUrl');
 const {
   sendWelcomeEmail, sendLoginAlertEmail,
   sendPasswordResetEmail, sendOtpEmail,
@@ -109,8 +110,7 @@ const forgotPassword = async (req, res, next) => {
     const token = crypto.randomBytes(32).toString('hex');
     resetTokens.set(token, { userId: user.id, expiresAt: Date.now() + 30 * 60 * 1000 });
 
-    const CLIENT_URL = process.env.CLIENT_URL || 'https://alert-hub-roan.vercel.app';
-    const resetUrl = `${CLIENT_URL}/reset-password?token=${token}`;
+    const resetUrl = `${getAppUrl()}/reset-password?token=${token}`;
     sendPasswordResetEmail(user, resetUrl).catch(() => {});
 
     res.json({ ok: true });
